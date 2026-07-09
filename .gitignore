@@ -1,0 +1,12 @@
+# Build artefakti
+build/
+*.o
+*.so
+*.a
+
+# Generisani LLVM IR
+*.ll
+*.bc
+
+# Editor
+.vscode/
