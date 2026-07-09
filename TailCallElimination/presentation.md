@@ -30,6 +30,31 @@ vrednosti argumenata i skoči na početak funkcije.
 Posledica je značajna: obična rekurzija dubine n troši n okvira na steku (O(n)
 prostora) i za veliko n dovodi do preopterećenja steka. Posle optimizacije troši
 se samo jedan okvir (O(1)).
+**Primer:**
+
+Repno-rekurzivna funkcija koja sabira brojeve od 1 do `n` (uz akumulator `acc`):
+
+```c
+int sum(int n, int acc) {
+    if (n == 0)
+        return acc;              
+    return sum(n - 1, acc + n);  
+}
+```
+
+**Posle:**
+
+TCE ovaj repni poziv pretvara u petlju — isti rezultat, ali sa jednim stek okvirom umesto `n`:
+
+```c
+int sum(int n, int acc) {
+    while (n != 0) {
+        acc = acc + n;
+        n = n - 1;
+    }
+    return acc;
+}
+```
 
 ## Algoritam
 
