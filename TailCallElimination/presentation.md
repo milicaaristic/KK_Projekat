@@ -30,6 +30,7 @@ vrednosti argumenata i skoči na početak funkcije.
 Posledica je značajna: obična rekurzija dubine n troši n okvira na steku (O(n)
 prostora) i za veliko n dovodi do preopterećenja steka. Posle optimizacije troši
 se samo jedan okvir (O(1)).
+
 **Primer:**
 
 Repno-rekurzivna funkcija koja sabira brojeve od 1 do `n` (uz akumulator `acc`):
@@ -55,6 +56,26 @@ int sum(int n, int acc) {
     return acc;
 }
 ```
+
+# Kako repni poziv izgleda u LLVM IR-u
+Rekurzivna grana `return sum(n - 1, acc + n);` prevede se u blok `if.end`, koji izgleda ovako (izostavljene
+su pomoćne `load`/`store` linije):
+
+```llvm
+if.end:
+  %sub  = sub nsw i32 %2, 1                        ; n - 1
+  %add  = add nsw i32 %3, %4                       ; acc + n
+  %call = call i32 @sum(i32 %sub, i32 %add)        ; rekurzivni poziv
+  store i32 %call, ptr %retval
+  br label %return
+
+return:
+  %5 = load i32, ptr %retval
+  ret i32 %5
+```
+Ono što ovaj isečak čini repnim pozivom vidi se ako se prati sudbina rezultata
+poziva `%call`: on se ne koristi ni u kakvoj operaciji — samo se prosledi ka
+povratnoj vrednosti funkcije i odmah vraća preko `ret`.
 
 ## Algoritam
 
