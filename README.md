@@ -1,6 +1,6 @@
 # Projekat iz predmeta Konstrukcija kompilatora — LLVM optimizacioni prolaz
 
-Projekat iz predmeta **Konstrukcija kompilatora**. Sadrži LLVM optimizacioni
+Projekat sadrži LLVM optimizacioni
 prolaz (pass) **Tail Call Elimination**, sa test primerima i pratećom
 prezentacijom koja objašnjava algoritam korak po korak.
 
