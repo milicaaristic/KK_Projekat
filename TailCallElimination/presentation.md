@@ -57,7 +57,7 @@ int sum(int n, int acc) {
 }
 ```
 
-# Kako repni poziv izgleda u LLVM IR-u
+### Kako repni poziv izgleda u LLVM IR-u
 Rekurzivna grana `return sum(n - 1, acc + n);` prevede se u blok `if.end`, koji izgleda ovako (izostavljene
 su pomoćne `load`/`store` linije):
 
@@ -79,7 +79,36 @@ povratnoj vrednosti funkcije i odmah vraća preko `ret`.
 
 ## Algoritam
 
-> TODO
+### isTailRecursiveCall — prepoznavanje repnog poziva
+
+Proverava da li je dati poziv `CI` repni rekurzivni poziv funkcije `F`. Vraća
+`true` samo ako su ispunjena sva tri uslova:
+
+```cpp
+bool isTailRecursiveCall(CallInst *CI, Function &F) {
+  if (CI->getCalledFunction() != &F)
+    return false;
+
+  StoreInst *SI = dyn_cast_or_null<StoreInst>(CI->getNextNode());
+  if (!SI || SI->getValueOperand() != CI)
+    return false;
+
+  BranchInst *Br = dyn_cast_or_null<BranchInst>(SI->getNextNode());
+  if (!Br || !Br->isUnconditional())
+    return false;
+
+  return true;
+}
+```
+
+- `getCalledFunction() != &F` → poziv mora biti funkciji samoj sebi (rekurzija).
+- `store <rezultat>, <slot>` odmah posle poziva → rezultat poziva ide pravo u
+  povratni slot, bez ijedne operacije nad njim. Ovo odbacuje slučaj poput
+  `return n * sum(...)`, gde bi između poziva i `store`-a stajao `mul`.
+- blok se završava **bezuslovnim** skokom (`br`) ka `return` bloku → posle poziva
+  nema više nikakvog računanja, samo povratak.
+
+Ako bilo koji uslov padne, poziv nije u repnoj poziciji i preskačemo ga.
 
 ## Primeri
 
