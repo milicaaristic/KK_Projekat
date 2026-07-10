@@ -110,6 +110,77 @@ bool isTailRecursiveCall(CallInst *CI, Function &F) {
 
 Ako bilo koji uslov padne, poziv nije u repnoj poziciji i preskačemo ga.
 
+### findTailRecursiveCall — pronalaženje repnog poziva u funkciji
+
+Pomoćna funkcija koja prolazi kroz celu funkciju i vraća prvi repni rekurzivni
+poziv, ako takav postoji:
+
+```cpp
+CallInst *findTailRecursiveCall(Function &F) {
+  for (BasicBlock &BB : F)
+    for (Instruction &I : BB)
+      if (CallInst *CI = dyn_cast(&I))
+        if (isTailRecursiveCall(CI, F))
+          return CI;
+  return nullptr;
+}
+```
+
+- Prolazi kroz sve bazične blokove funkcije, a unutar svakog kroz sve instrukcije.
+- Za svaku instrukciju proverava da li je poziv (`dyn_cast<CallInst>`), pa da li
+  je baš repni rekurzivni poziv (`isTailRecursiveCall` iz prethodnog koraka).
+- Vraća prvi takav poziv (`CallInst *`); ako ga u funkciji nema, vraća `nullptr`.
+- Time razdvajamo funkcije koje treba optimizovati (imaju repni poziv) od onih
+  koje preskačemo
+
+  ### createLoopHeader — pravljenje zaglavlja petlje
+
+Priprema teren za petlju tako što deli `entry` blok na dva dela: inicijalni upisi
+argumenata ostaju u `entry` (izvršavaju se jednom), a telo funkcije prelazi u novi
+blok `header`.
+
+```cpp
+BasicBlock *createLoopHeader(Function &F) {
+  BasicBlock &Entry = F.getEntryBlock();
+
+  Instruction *SplitPoint = nullptr;
+  for (Instruction &I : Entry)
+    if (StoreInst *SI = dyn_cast(&I))
+      if (isa(SI->getValueOperand()))
+        SplitPoint = SI->getNextNode();
+
+  return Entry.splitBasicBlock(SplitPoint, "header");
+}
+```
+
+- `getEntryBlock()` vraća prvi (ulazni) blok funkcije — u LLVM-u to je blok od
+  kog izvršavanje počinje.
+- Petlja traži `store` čija je upisana vrednost argument funkcije
+  (`isa<Argument>`), tj. inicijalne upise argumenata. Time ih razlikuje od ostalih `store`-ova u telu.
+- `SplitPoint` se prepisuje na svakom takvom upisu (bez `break`), pa na kraju
+  pokazuje na instrukciju odmah posle **poslednjeg** upisa argumenta — tj. na
+  prvu instrukciju pravog tela. Radi za bilo koji broj argumenata.
+- `splitBasicBlock(SplitPoint, "header")` seče blok tačno pre te instrukcije:
+  `alloca` i `store` argumenata ostaju u `entry`, ostatak prelazi u novi blok
+  `header`, a LLVM automatski dodaje `br label %header` na kraj `entry`-ja.
+
+Rezultat na IR-u — `entry` je sada podeljen, a ponašanje nepromenjeno:
+
+```llvm
+entry:
+  %retval  = alloca i32
+  %n.addr  = alloca i32
+  %acc.addr = alloca i32
+  store i32 %n,   ptr %n.addr
+  store i32 %acc, ptr %acc.addr
+  br label %header          ; automatski dodat skok
+
+header:                     ; novi blok — telo funkcije
+  %0 = load i32, ptr %n.addr
+  %cmp = icmp eq i32 %0, 0
+  br i1 %cmp, label %if.then, label %if.end
+```
+
 ## Primeri
 
 > TODO
