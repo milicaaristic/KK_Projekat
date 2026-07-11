@@ -287,4 +287,31 @@ i iz `if.end` (svaka iteracija), što čini petlju. Rezultat programa je neprome
 
 ## Primeri
 
-> TODO
+### Ulazni program
+
+```c
+int sum(int n, int acc) {
+    if (n == 0)
+        return acc;
+    return sum(n - 1, acc + n);  // repni poziv
+}
+```
+
+### Efekat na IR (telo rekurzivne grane)
+
+Pre — rekurzivni poziv:
+```llvm
+%call = call i32 @sum(i32 %sub, i32 %add)
+store i32 %call, ptr %retval
+br label %return
+```
+
+Posle — upis novih vrednosti i skok nazad:
+```llvm
+store i32 %sub, ptr %n.addr
+store i32 %add, ptr %acc.addr
+br label %header
+```
+
+Rekurzivni poziv je nestao; `sum` se izvršava kao petlja, uz nepromenjen
+rezultat (`sum(100, 0)` = 5050).
