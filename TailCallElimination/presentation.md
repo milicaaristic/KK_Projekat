@@ -181,6 +181,29 @@ header:                     ; novi blok — telo funkcije
   br i1 %cmp, label %if.then, label %if.end
 ```
 
+### findArgumentSlots — pamćenje stek-slotova parametara
+
+Pravi mapu koja za svaki argument funkcije pamti u kom stek-slotu (`%x.addr`)
+on živi. Ta informacija je potrebna da bi se pri skoku znalo *gde* upisati nove
+vrednosti argumenata.
+
+```cpp
+void findArgumentSlots(Function &F) {
+  for (Instruction &I : F.getEntryBlock())
+    if (StoreInst *SI = dyn_cast<StoreInst>(&I))
+      if (Argument *A = dyn_cast<Argument>(SI->getValueOperand()))
+        Slots[A] = SI->getPointerOperand();
+}
+```
+
+- Prolazi kroz `entry` blok, gde se nalaze inicijalni upisi argumenata.
+- Bira samo `store`-ove čija je upisana vrednost argument funkcije
+  (`isa<Argument>`), tj. upise oblika `store i32 %n, ptr %n.addr`.
+- `getPointerOperand()` je odredište upisa (slot `%n.addr`); pamti se u mapi kao
+  „argument `A` → njegov slot".
+- Rezultat za `sum`: `{ n → %n.addr, acc → %acc.addr }`. Mapa je član strukture,
+  pa se na početku `runOnFunction` čisti (`Slots.clear()`).
+
 ## Primeri
 
 > TODO
