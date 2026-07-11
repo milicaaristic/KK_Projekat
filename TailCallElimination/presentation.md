@@ -235,6 +235,29 @@ void replaceCallWithJump(Function &F, CallInst *TailCall, BasicBlock *Header) {
 - Brisanje ide redom `OldBr` → `RetStore` → `TailCall`: vrednost poziva se ne sme
   obrisati dok je `RetStore` još koristi.
 
+### runOnFunction — spajanje koraka
+
+Povezuje sve: nađe repni poziv, i ako postoji, izvede transformaciju.
+
+```cpp
+bool runOnFunction(Function &F) override {
+  Slots.clear();
+
+  CallInst *TailCall = findTailRecursiveCall(F);
+  if (!TailCall)
+    return false;               // nema repnog poziva (npr. main) -> ne diramo
+
+  findArgumentSlots(F);
+  BasicBlock *Header = createLoopHeader(F);
+  replaceCallWithJump(F, TailCall, Header);
+  return true;
+}
+```
+
+- Funkcije bez repnog poziva se preskaču (`return false`).
+- Redosled je bitan: `findArgumentSlots` mora pre `createLoopHeader`, da se
+  slotovi pročitaju dok je `entry` još ceo.
+
 ## Primeri
 
 > TODO
