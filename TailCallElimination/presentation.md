@@ -258,6 +258,33 @@ bool runOnFunction(Function &F) override {
 - Redosled je bitan: `findArgumentSlots` mora pre `createLoopHeader`, da se
   slotovi pročitaju dok je `entry` još ceo.
 
+### Rezultat transformacije
+
+Telo rekurzivne grane pre i posle prolaza pokazuje šta pass radi:
+
+**Pre** — rekurzivni poziv:
+```llvm
+if.end:
+  %sub  = sub nsw i32 %2, 1
+  %add  = add nsw i32 %3, %4
+  %call = call i32 @sum(i32 %sub, i32 %add)
+  store i32 %call, ptr %retval
+  br label %return
+```
+
+**Posle** — upis novih vrednosti i skok nazad (petlja):
+```llvm
+if.end:
+  %sub = sub nsw i32 %2, 1
+  %add = add nsw i32 %3, %4
+  store i32 %sub, ptr %n.addr
+  store i32 %add, ptr %acc.addr
+  br label %header
+```
+
+Rekurzivnog poziva više nema; `header` se sada dostiže i iz `entry` (prvi ulaz)
+i iz `if.end` (svaka iteracija), što čini petlju. Rezultat programa je nepromenjen.
+
 ## Primeri
 
 > TODO
