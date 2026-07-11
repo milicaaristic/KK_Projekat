@@ -204,6 +204,37 @@ void findArgumentSlots(Function &F) {
 - Rezultat za `sum`: `{ n → %n.addr, acc → %acc.addr }`. Mapa je član strukture,
   pa se na početku `runOnFunction` čisti (`Slots.clear()`).
 
+### replaceCallWithJump — pretvaranje poziva u skok
+
+Srce transformacije: repni poziv zamenjuje upisom novih vrednosti argumenata u
+slotove parametara i skokom nazad na `header`.
+
+```cpp
+void replaceCallWithJump(Function &F, CallInst *TailCall, BasicBlock *Header) {
+  StoreInst *RetStore = cast<StoreInst>(TailCall->getNextNode());
+  BranchInst *OldBr = cast<BranchInst>(RetStore->getNextNode());
+
+  IRBuilder<> Builder(OldBr);
+  for (unsigned i = 0; i < TailCall->arg_size(); ++i)
+    Builder.CreateStore(TailCall->getArgOperand(i), Slots[F.getArg(i)]);
+  Builder.CreateBr(Header);
+
+  OldBr->eraseFromParent();
+  RetStore->eraseFromParent();
+  TailCall->eraseFromParent();
+}
+```
+
+- `RetStore` i `OldBr` su `store <rezultat>` i `br <return>` koji slede odmah
+  posle poziva. Koristi se `cast<>` jer je njihov tip već potvrđen u
+  `isTailRecursiveCall`.
+- `IRBuilder<> Builder(OldBr)` ubacuje nove instrukcije tačno pre stare grane.
+- Petlja upisuje `i`-tu vrednost poziva (`%sub`, `%add`) u slot `i`-tog parametra
+  (`%n.addr`, `%acc.addr`) i radi za bilo koji broj argumenata.
+- `CreateBr(Header)` dodaje skok nazad na početak petlje.
+- Brisanje ide redom `OldBr` → `RetStore` → `TailCall`: vrednost poziva se ne sme
+  obrisati dok je `RetStore` još koristi.
+
 ## Primeri
 
 > TODO
