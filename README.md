@@ -6,7 +6,7 @@ prezentacijom koja objašnjava algoritam korak po korak.
 
 | Prolaz | Direktorijum | LLVM Pass Manager | Šta radi |
 |---|---|---|---|
-| **Tail Call Elimination (TCE)** | [`TailCallElimination/`](./TailCallElimination) | _TODO_ | _TODO: kratak opis_ |
+| **Tail Call Elimination (TCE)** | [`TailCallElimination/`](./TailCallElimination) | Legacy PM (`FunctionPass`) | Pretvara repno-rekurzivne pozive u petlju, čime rekurzija troši konstantan umesto linearnog prostora na steku. |
 
 ---
 
