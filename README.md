@@ -13,7 +13,7 @@ prezentacijom koja objašnjava algoritam korak po korak.
 ## Tail Call Elimination
 
 **Fajlovi:** [`TailCallEliminationPass.cpp`](./TailCallElimination/TailCallEliminationPass.cpp) ·
-[`test.c`](./TailCallElimination/test.c) ·
+[`tests/`](./TailCallElimination/tests) ·
 [`presentation.md`](./TailCallElimination/presentation.md)
 
 Prolaz pronalazi repne rekurzivne pozive — pozive funkcije samoj sebi čiji se
@@ -57,22 +57,30 @@ ninja LLVMTailCallElimination
 
 ```bash
 # C -> LLVM IR (neoptimizovan)
-clang -S -emit-llvm -Xclang -disable-O0-optnone test.c -o test.ll
+clang -S -emit-llvm -Xclang -disable-O0-optnone tests/sum.c -o sum.ll
 
 # pokretanje passa (iz build direktorijuma LLVM-a)
 opt -load lib/LLVMTailCallElimination.so -enable-new-pm=0 \
-    -tail-call-elimination -S test.ll -o izlaz.ll
+    -tail-call-elimination -S sum.ll -o sum.opt.ll
 ```
 
 Prolaz na `stderr` ispisuje svaku funkciju u kojoj je repni poziv pretvoren u
 petlju (`TCE: repni poziv pretvoren u petlju u funkciji ...`).
 
+### Test primeri
+
+Primeri se nalaze u [`tests/`](./TailCallElimination/tests):
+
+| Fajl | Šta proverava |
+|---|---|
+| `sum.c` | osnovni slučaj — dva argumenta, repna rekurzija sa akumulatorom |
+| `countdown.c` | jedan argument |
+| `three_args.c` | tri argumenta (opštost mapiranja argument → slot) |
+
 ## Zahtevi
 
-- LLVM / Clang (uključujući `opt`, `llvm-config` i razvojne headere) — pass
-  koristi LLVM IR API, pa je potrebna ista major verzija LLVM-a s kojom se
-  gradi i s kojom se pokreće `opt`.
-- CMake ≥ 3.20.
+- LLVM / Clang 17 (uključujući `opt` i `clang`) — pass koristi LLVM IR API, pa je
+  potrebna ista verzija LLVM-a s kojom se gradi i s kojom se pokreće `opt`.
 - Kompajler sa podrškom za C++17.
 
 ## Autor
