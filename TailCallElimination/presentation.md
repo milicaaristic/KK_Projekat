@@ -119,7 +119,7 @@ poziv, ako takav postoji:
 CallInst *findTailRecursiveCall(Function &F) {
   for (BasicBlock &BB : F)
     for (Instruction &I : BB)
-      if (CallInst *CI = dyn_cast(&I))
+      if (CallInst *CI = dyn_cast<CallInst>(&I))
         if (isTailRecursiveCall(CI, F))
           return CI;
   return nullptr;
@@ -145,8 +145,8 @@ BasicBlock *createLoopHeader(Function &F) {
 
   Instruction *SplitPoint = nullptr;
   for (Instruction &I : Entry)
-    if (StoreInst *SI = dyn_cast(&I))
-      if (isa(SI->getValueOperand()))
+    if (StoreInst *SI = dyn_cast<StoreInst>(&I))
+      if (isa<Argument>(SI->getValueOperand()))
         SplitPoint = SI->getNextNode();
 
   return Entry.splitBasicBlock(SplitPoint, "header");
@@ -297,20 +297,16 @@ int sum(int n, int acc) {
 }
 ```
 
-### Efekat na IR (telo rekurzivne grane)
+### Posle — ekvivalentna petlja (koju TCE efektivno proizvodi):
 
-Pre — rekurzivni poziv:
-```llvm
-%call = call i32 @sum(i32 %sub, i32 %add)
-store i32 %call, ptr %retval
-br label %return
-```
-
-Posle — upis novih vrednosti i skok nazad:
-```llvm
-store i32 %sub, ptr %n.addr
-store i32 %add, ptr %acc.addr
-br label %header
+```c
+int sum(int n, int acc) {
+    while (n != 0) {
+        acc = acc + n;
+        n = n - 1;
+    }
+    return acc;
+}
 ```
 
 Rekurzivni poziv je nestao; `sum` se izvršava kao petlja, uz nepromenjen
