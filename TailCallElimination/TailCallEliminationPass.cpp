@@ -88,10 +88,11 @@ struct TailCallElimination : public FunctionPass {
     if (!TailCall)
       return false;
 
+    findArgumentSlots(F);
     BasicBlock *Header = createLoopHeader(F);
     replaceCallWithJump(F, TailCall, Header);
 
-    errs() << "TCE: repni poziv pretvoren u petlju u funkciji ... " << F.getName() << "\n";
+    errs() << "TCE: turned tail call into a loop in function " << F.getName() << "\n";
 
     return true;
   }
