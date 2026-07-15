@@ -81,32 +81,62 @@ povratnoj vrednosti funkcije i odmah vraća preko `ret`.
 
 ### isTailRecursiveCall — prepoznavanje repnog poziva
 
-Proverava da li je dati poziv `CI` repni rekurzivni poziv funkcije `F`. Vraća
-`true` samo ako su ispunjena sva tri uslova:
+Proverava da li je dati poziv `CI` repni rekurzivni poziv funkcije `F`. Razlikuju
+se dva slučaja: poziv koji vraća vrednost i `void` poziv.
 
 ```cpp
 bool isTailRecursiveCall(CallInst *CI, Function &F) {
+  // Poziv mora biti funkciji samoj sebi (rekurzija).
   if (CI->getCalledFunction() != &F)
     return false;
 
-  StoreInst *SI = dyn_cast_or_null<StoreInst>(CI->getNextNode());
+  Instruction *Next = CI->getNextNode();
+
+  // void slučaj: call void @F(...) pa odmah skok ka bloku sa 'ret void'.
+  if (CI->getType()->isVoidTy()) {
+    BranchInst *Br = dyn_cast_or_null<BranchInst>(Next);
+    if (!Br || !Br->isUnconditional())
+      return false;
+    ReturnInst *Ret =
+        dyn_cast<ReturnInst>(Br->getSuccessor(0)->getTerminator());
+    return Ret && Ret->getReturnValue() == nullptr;
+  }
+
+  // Slučaj sa povratnom vrednošću: rezultat poziva se upisuje u slot ...
+  StoreInst *SI = dyn_cast_or_null<StoreInst>(Next);
   if (!SI || SI->getValueOperand() != CI)
     return false;
 
+  // ... zatim ide bezuslovni skok ...
   BranchInst *Br = dyn_cast_or_null<BranchInst>(SI->getNextNode());
   if (!Br || !Br->isUnconditional())
     return false;
 
-  return true;
+  // ... ka bloku koji vraća tačno vrednost iz tog istog slota, bez ijedne
+  // operacije nad njom (ovo odbacuje npr. 'return f(n-1) + 1').
+  ReturnInst *Ret =
+      dyn_cast<ReturnInst>(Br->getSuccessor(0)->getTerminator());
+  if (!Ret)
+    return false;
+  LoadInst *LI = dyn_cast_or_null<LoadInst>(Ret->getReturnValue());
+  return LI && LI->getPointerOperand() == SI->getPointerOperand();
 }
 ```
 
 - `getCalledFunction() != &F` → poziv mora biti funkciji samoj sebi (rekurzija).
-- `store <rezultat>, <slot>` odmah posle poziva → rezultat poziva ide pravo u
-  povratni slot, bez ijedne operacije nad njim. Ovo odbacuje slučaj poput
-  `return n * sum(...)`, gde bi između poziva i `store`-a stajao `mul`.
-- blok se završava **bezuslovnim** skokom (`br`) ka `return` bloku → posle poziva
-  nema više nikakvog računanja, samo povratak.
+- **`void` slučaj** (`CI->getType()->isVoidTy()`): nema rezultata pa nema ni
+  `store`-a — posle poziva mora odmah da stoji bezuslovni skok ka bloku koji se
+  završava sa `ret void` (`getReturnValue() == nullptr`).
+- **Slučaj sa povratnom vrednošću:** odmah posle poziva mora stajati
+  `store <rezultat poziva>, <slot>` (`getValueOperand() != CI` odbacuje sve
+  ostalo), pa bezuslovni skok.
+- Nije dovoljno da postoji `store` i `br` — blok u koji se skače mora da se
+  završava sa `ret`, i to `ret` koji vraća `load` iz **istog slota** u koji je
+  rezultat upisan (`LI->getPointerOperand() == SI->getPointerOperand()`). Tek to
+  garantuje da rezultat poziva stiže do povratne vrednosti netaknut.
+- Ova poslednja provera odbacuje pozive koji samo liče na repne, npr.
+  `x = f(n - 1); ... return x + 1;` — tamo se rezultat upisuje u lokalnu
+  promenljivu, a blok posle skoka radi `add` umesto `ret`.
 
 Ako bilo koji uslov padne, poziv nije u repnoj poziciji i preskačemo ga.
 
