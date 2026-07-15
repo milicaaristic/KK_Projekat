@@ -246,8 +246,12 @@ slotove parametara i skokom nazad na `header`.
 
 ```cpp
 void replaceCallWithJump(Function &F, CallInst *TailCall, BasicBlock *Header) {
-  StoreInst *RetStore = cast<StoreInst>(TailCall->getNextNode());
-  BranchInst *OldBr = cast<BranchInst>(RetStore->getNextNode());
+  Instruction *Next = TailCall->getNextNode();
+
+  // U void slučaju nema upisa rezultata; skok ide odmah posle poziva.
+  StoreInst *RetStore = dyn_cast<StoreInst>(Next);
+  BranchInst *OldBr = RetStore ? cast<BranchInst>(RetStore->getNextNode())
+                               : cast<BranchInst>(Next);
 
   IRBuilder<> Builder(OldBr);
   for (unsigned i = 0; i < TailCall->arg_size(); ++i)
@@ -255,20 +259,24 @@ void replaceCallWithJump(Function &F, CallInst *TailCall, BasicBlock *Header) {
   Builder.CreateBr(Header);
 
   OldBr->eraseFromParent();
-  RetStore->eraseFromParent();
+  if (RetStore)
+    RetStore->eraseFromParent();
   TailCall->eraseFromParent();
 }
 ```
 
-- `RetStore` i `OldBr` su `store <rezultat>` i `br <return>` koji slede odmah
-  posle poziva. Koristi se `cast<>` jer je njihov tip već potvrđen u
-  `isTailRecursiveCall`.
+- `RetStore` je `store <rezultat>` koji sledi odmah posle poziva. Kod `void`
+  funkcija njega nema, pa `dyn_cast` vrati `nullptr` — zato se stara grana traži
+  ili posle `store`-a, ili odmah posle poziva.
+- Koristi se `cast<>` (a ne `dyn_cast<>`) za granu jer je oblik već potvrđen u
+  `isTailRecursiveCall` — poznato je da tu stoji bezuslovni skok.
 - `IRBuilder<> Builder(OldBr)` ubacuje nove instrukcije tačno pre stare grane.
 - Petlja upisuje `i`-tu vrednost poziva (`%sub`, `%add`) u slot `i`-tog parametra
   (`%n.addr`, `%acc.addr`) i radi za bilo koji broj argumenata.
 - `CreateBr(Header)` dodaje skok nazad na početak petlje.
 - Brisanje ide redom `OldBr` → `RetStore` → `TailCall`: vrednost poziva se ne sme
-  obrisati dok je `RetStore` još koristi.
+  obrisati dok je `RetStore` još koristi. Upis rezultata se briše samo ako postoji
+  (`if (RetStore)`), zbog `void` slučaja.
 
 ### runOnFunction — spajanje koraka
 
