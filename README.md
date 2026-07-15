@@ -21,18 +21,21 @@ rezultat odmah vraća, bez ijedne operacije posle njih — i pretvara ih u petlj
 umesto pravog poziva. Time rekurzija koja bi trošila O(n) stek okvira radi u
 konstantnom prostoru (O(1)), bez rizika od preopterećenja steka.
 
-Tok transformacije (nad jednom funkcijom):
+Tok transformacije (nad jednom funkcijom, za **svaki** repni poziv u njoj):
 
-1. **Prepoznavanje** — pronađi poziv samom sebi čiji rezultat vodi pravo u `ret`
-   (obrazac `call → store → br`), bez međuoperacija.
+1. **Prepoznavanje** — pronađi poziv samom sebi čiji rezultat vodi pravo u `ret`:
+   rezultat se upisuje u povratni slot, a blok u koji se skače samo vraća tu istu
+   vrednost, bez ijedne operacije nad njom. Podržan je i `void` slučaj, gde poziv
+   prati skok ka bloku sa `ret void`.
 2. **Zaglavlje petlje** — podeli `entry` blok posle inicijalnih upisa argumenata
    na `entry` + `header`; `header` je meta budućeg skoka.
 3. **Slotovi parametara** — zapamti u kom stek-slotu (`%x.addr`) živi svaki parametar.
 4. **Poziv → skok** — umesto poziva, upiši nove vrednosti argumenata u slotove
-   parametara i skoči nazad na `header`; obriši stari poziv, upis rezultata i granu.
+   parametara i skoči nazad na `header`; obriši stari poziv, upis rezultata (ako ga ima) i granu.
 
 > Prolaz pretpostavlja neoptimizovani IR (`clang -O0` uz `-disable-O0-optnone`),
-> gde repni poziv sa povratnom vrednošću ima oblik `call → store → br`.
+> gde repni poziv sa povratnom vrednošću ima oblik `call → store → br`, odnosno
+> `call → br` za `void` funkcije.
 
 Korak-po-korak objašnjenje sa primerima nalazi se u
 [prezentaciji](./TailCallElimination/presentation.md).
@@ -64,8 +67,8 @@ opt -load lib/LLVMTailCallElimination.so -enable-new-pm=0 \
     -tail-call-elimination -S sum.ll -o sum.opt.ll
 ```
 
-Prolaz na `stderr` ispisuje svaku funkciju u kojoj je repni poziv pretvoren u
-petlju (`TCE: repni poziv pretvoren u petlju u funkciji ...`).
+Prolaz na `stderr` ispisuje svaku funkciju u kojoj su repni pozivi pretvoreni u
+petlju, sa njihovim brojem (`TCE: turned tail calls into a loop in function ... (N)`).
 
 ### Test primeri
 
@@ -76,6 +79,10 @@ Primeri se nalaze u [`tests/`](./TailCallElimination/tests):
 | `sum.c` | osnovni slučaj — dva argumenta, repna rekurzija sa akumulatorom |
 | `countdown.c` | jedan argument |
 | `three_args.c` | tri argumenta (opštost mapiranja argument → slot) |
+| `fact.c` | nije repni poziv (`n * fact(n-1)`) — prolaz ga ne dira |
+| `notail.c` | nije repni poziv (`return x + 1` posle poziva) — prolaz ga ne dira |
+| `multi.c` | dva repna poziva u istoj funkciji — oba se odmotavaju |
+| `voidrec.c` | `void` repna rekurzija |
 
 ## Zahtevi
 
