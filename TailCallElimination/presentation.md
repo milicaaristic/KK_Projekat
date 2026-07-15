@@ -31,32 +31,6 @@ Posledica je značajna: obična rekurzija dubine n troši n okvira na steku (O(n
 prostora) i za veliko n dovodi do preopterećenja steka. Posle optimizacije troši
 se samo jedan okvir (O(1)).
 
-**Primer:**
-
-Repno-rekurzivna funkcija koja sabira brojeve od 1 do `n` (uz akumulator `acc`):
-
-```c
-int sum(int n, int acc) {
-    if (n == 0)
-        return acc;              
-    return sum(n - 1, acc + n);  
-}
-```
-
-**Posle:**
-
-TCE ovaj repni poziv pretvara u petlju — isti rezultat, ali sa jednim stek okvirom umesto `n`:
-
-```c
-int sum(int n, int acc) {
-    while (n != 0) {
-        acc = acc + n;
-        n = n - 1;
-    }
-    return acc;
-}
-```
-
 ### Kako repni poziv izgleda u LLVM IR-u
 Rekurzivna grana `return sum(n - 1, acc + n);` prevede se u blok `if.end`, koji izgleda ovako (izostavljene
 su pomoćne `load`/`store` linije):
@@ -233,7 +207,7 @@ void findArgumentSlots(Function &F) {
 
 - Prolazi kroz `entry` blok, gde se nalaze inicijalni upisi argumenata.
 - Bira samo `store`-ove čija je upisana vrednost argument funkcije
-  (`isa<Argument>`), tj. upise oblika `store i32 %n, ptr %n.addr`.
+  (`dyn_cast<Argument>`), tj. upise oblika `store i32 %n, ptr %n.addr`.
 - `getPointerOperand()` je odredište upisa (slot `%n.addr`); pamti se u mapi kao
   „argument `A` → njegov slot".
 - Rezultat za `sum`: `{ n → %n.addr, acc → %acc.addr }`. Mapa je član strukture,
