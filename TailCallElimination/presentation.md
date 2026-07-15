@@ -140,30 +140,35 @@ bool isTailRecursiveCall(CallInst *CI, Function &F) {
 
 Ako bilo koji uslov padne, poziv nije u repnoj poziciji i preskačemo ga.
 
-### findTailRecursiveCall — pronalaženje repnog poziva u funkciji
+### findTailRecursiveCalls — pronalaženje svih repnih poziva
 
-Pomoćna funkcija koja prolazi kroz celu funkciju i vraća prvi repni rekurzivni
-poziv, ako takav postoji:
+Prolazi kroz celu funkciju i skuplja **sve** repne rekurzivne pozive, ne samo
+prvi na koji naiđe:
 
 ```cpp
-CallInst *findTailRecursiveCall(Function &F) {
+std::vector<CallInst *> findTailRecursiveCalls(Function &F) {
+  std::vector<CallInst *> Calls;
   for (BasicBlock &BB : F)
     for (Instruction &I : BB)
       if (CallInst *CI = dyn_cast<CallInst>(&I))
         if (isTailRecursiveCall(CI, F))
-          return CI;
-  return nullptr;
+          Calls.push_back(CI);
+  return Calls;
 }
 ```
 
 - Prolazi kroz sve bazične blokove funkcije, a unutar svakog kroz sve instrukcije.
 - Za svaku instrukciju proverava da li je poziv (`dyn_cast<CallInst>`), pa da li
   je baš repni rekurzivni poziv (`isTailRecursiveCall` iz prethodnog koraka).
-- Vraća prvi takav poziv (`CallInst *`); ako ga u funkciji nema, vraća `nullptr`.
-- Time razdvajamo funkcije koje treba optimizovati (imaju repni poziv) od onih
-  koje preskačemo
+- Svaki pronađeni poziv dodaje u vektor; ako u funkciji nema nijednog, vektor
+  ostaje prazan.
+- Funkcija može imati više repnih poziva u različitim granama, npr.
+  `if (n > 0) return f(n - 1); if (n < 0) return f(n + 1);` — svi se skupljaju i
+  kasnije odmotavaju, a ne samo prvi.
+- Time razdvajamo funkcije koje treba optimizovati (imaju bar jedan repni poziv)
+  od onih koje preskačemo (npr. `main`).
 
-  ### createLoopHeader — pravljenje zaglavlja petlje
+### createLoopHeader — pravljenje zaglavlja petlje
 
 Priprema teren za petlju tako što deli `entry` blok na dva dela: inicijalni upisi
 argumenata ostaju u `entry` (izvršavaju se jednom), a telo funkcije prelazi u novi
