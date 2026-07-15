@@ -5,6 +5,7 @@
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/IR/IRBuilder.h"
 #include <unordered_map>
+#include <vector>
 
 using namespace llvm;
 
@@ -17,29 +18,54 @@ struct TailCallElimination : public FunctionPass {
   TailCallElimination() : FunctionPass(ID) {}
 
   // Is CI a tail-recursive call of function F?
+  // Handles both the value-returning and the void case.
   bool isTailRecursiveCall(CallInst *CI, Function &F) {
+    // Must call itself (recursion).
     if (CI->getCalledFunction() != &F)
       return false;
 
-    StoreInst *SI = dyn_cast_or_null<StoreInst>(CI->getNextNode());
+    Instruction *Next = CI->getNextNode();
+
+    // Void case:  call void @F(...)  followed directly by a branch to a
+    // block that only does 'ret void' -- nothing happens after the call.
+    if (CI->getType()->isVoidTy()) {
+      BranchInst *Br = dyn_cast_or_null<BranchInst>(Next);
+      if (!Br || !Br->isUnconditional())
+        return false;
+      ReturnInst *Ret =
+          dyn_cast<ReturnInst>(Br->getSuccessor(0)->getTerminator());
+      return Ret && Ret->getReturnValue() == nullptr;
+    }
+
+    // Value-returning case: the call result is stored into a slot ...
+    StoreInst *SI = dyn_cast_or_null<StoreInst>(Next);
     if (!SI || SI->getValueOperand() != CI)
       return false;
 
+    // ... then an unconditional branch ...
     BranchInst *Br = dyn_cast_or_null<BranchInst>(SI->getNextNode());
     if (!Br || !Br->isUnconditional())
       return false;
 
-    return true;
+    // ... to a block that returns exactly that slot's value, with no
+    // operation applied to it (this rejects e.g. 'return f(n-1) + 1').
+    ReturnInst *Ret =
+        dyn_cast<ReturnInst>(Br->getSuccessor(0)->getTerminator());
+    if (!Ret)
+      return false;
+    LoadInst *LI = dyn_cast_or_null<LoadInst>(Ret->getReturnValue());
+    return LI && LI->getPointerOperand() == SI->getPointerOperand();
   }
 
-  // Return the first tail-recursive call in F, or nullptr if there is none.
-  CallInst *findTailRecursiveCall(Function &F) {
+  // Collect ALL tail-recursive calls in F (not just the first one).
+  std::vector<CallInst *> findTailRecursiveCalls(Function &F) {
+    std::vector<CallInst *> Calls;
     for (BasicBlock &BB : F)
       for (Instruction &I : BB)
         if (CallInst *CI = dyn_cast<CallInst>(&I))
           if (isTailRecursiveCall(CI, F))
-            return CI;
-    return nullptr;
+            Calls.push_back(CI);
+    return Calls;
   }
 
   // Split the entry block after the initial argument stores.
@@ -65,9 +91,12 @@ struct TailCallElimination : public FunctionPass {
   }
 
   void replaceCallWithJump(Function &F, CallInst *TailCall, BasicBlock *Header) {
+    Instruction *Next = TailCall->getNextNode();
 
-    StoreInst *RetStore = cast<StoreInst>(TailCall->getNextNode());               
-    BranchInst *OldBr = cast<BranchInst>(RetStore->getNextNode());               
+    // In the void case there is no result store; the branch follows the call.
+    StoreInst *RetStore = dyn_cast<StoreInst>(Next);
+    BranchInst *OldBr = RetStore ? cast<BranchInst>(RetStore->getNextNode())
+                                 : cast<BranchInst>(Next);             
 
     // Instead of the call: write the new argument values into the parameter
     // slots, then jump back to header (the start of the loop).
@@ -76,23 +105,28 @@ struct TailCallElimination : public FunctionPass {
       Builder.CreateStore(TailCall->getArgOperand(i), Slots[F.getArg(i)]);
     Builder.CreateBr(Header);
 
+    // Erase the old branch, the result store (if any) and the call itself.
     OldBr->eraseFromParent();
-    RetStore->eraseFromParent();
+    if (RetStore)
+      RetStore->eraseFromParent();
     TailCall->eraseFromParent();
   }
 
   bool runOnFunction(Function &F) override {
     Slots.clear();  
+    if (F.arg_empty())
+      return false;
 
-    CallInst *TailCall = findTailRecursiveCall(F);
-    if (!TailCall)
+    std::vector<CallInst *> TailCalls = findTailRecursiveCalls(F);
+    if (TailCalls.empty())
       return false;
 
     findArgumentSlots(F);
     BasicBlock *Header = createLoopHeader(F);
-    replaceCallWithJump(F, TailCall, Header);
+    for (CallInst *TailCall : TailCalls)
+      replaceCallWithJump(F, TailCall, Header);
 
-    errs() << "TCE: turned tail call into a loop in function " << F.getName() << "\n";
+    errs() << "TCE: turned tail calls into a loop in function " << F.getName() << " (" << TailCalls.size() << ")\n";
 
     return true;
   }

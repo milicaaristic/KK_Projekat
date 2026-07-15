@@ -7,6 +7,6 @@ int countdown(int n) {
 }
 
 int main() {
-    printf("%d\n", countdown(1000));   // ocekivano: 0
+    printf("%d\n", countdown(1000));
     return 0;
 }
