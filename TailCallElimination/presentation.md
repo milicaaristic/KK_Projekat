@@ -367,4 +367,6 @@ int sum(int n, int acc) {
 ```
 
 Rekurzivni poziv je nestao; `sum` se izvršava kao petlja, uz nepromenjen
-rezultat (`sum(100, 0)` = 5050).
+rezultat (`sum(100, 0)` = 5050). Ako funkcija ima više repnih poziva, svaki od njih se na isti način zamenjuje
+skokom na isto zaglavlje. Kod `void` funkcija razlika je samo u tome što nema
+upisa rezultata — poziv prati skok, koji se zamenjuje skokom na `header`.
