@@ -280,26 +280,40 @@ void replaceCallWithJump(Function &F, CallInst *TailCall, BasicBlock *Header) {
 
 ### runOnFunction — spajanje koraka
 
-Povezuje sve: nađe repni poziv, i ako postoji, izvede transformaciju.
+Povezuje sve: skupi repne pozive, i ako ih ima, izvede transformaciju.
 
 ```cpp
 bool runOnFunction(Function &F) override {
   Slots.clear();
 
-  CallInst *TailCall = findTailRecursiveCall(F);
-  if (!TailCall)
-    return false;               // nema repnog poziva (npr. main) -> ne diramo
+  // Nema šta da se prepisuje između iteracija ako funkcija nema argumente.
+  if (F.arg_empty())
+    return false;
+
+  std::vector<CallInst *> TailCalls = findTailRecursiveCalls(F);
+  if (TailCalls.empty())
+    return false;
 
   findArgumentSlots(F);
   BasicBlock *Header = createLoopHeader(F);
-  replaceCallWithJump(F, TailCall, Header);
+  for (CallInst *TailCall : TailCalls)
+    replaceCallWithJump(F, TailCall, Header);
+
   return true;
 }
 ```
 
-- Funkcije bez repnog poziva se preskaču (`return false`).
+- `Slots.clear()` — mapa je član strukture, a `runOnFunction` se poziva za svaku
+  funkciju posebno, pa se čisti da se podaci ne preliju iz prethodne funkcije.
+- Funkcije bez argumenata se preskaču: kod njih ne postoji nijedan
+  `store <arg>, <slot>`, pa nema slotova koje bi petlja prepisivala.
+- Funkcije bez repnog poziva se preskaču (`return false`) — npr. `main`.
 - Redosled je bitan: `findArgumentSlots` mora pre `createLoopHeader`, da se
   slotovi pročitaju dok je `entry` još ceo.
+- Zaglavlje petlje se pravi **jednom**, a zatim se svaki pronađeni repni poziv
+  zamenjuje skokom na to isto zaglavlje.
+- Povratna vrednost `true` znači da je IR promenjen, `false` da funkcija nije
+  dirana.
 
 ### Rezultat transformacije
 
